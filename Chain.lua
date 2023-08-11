@@ -1,18 +1,20 @@
 _addon.author = 'Radec'
 _addon.command = 'ch'
 _addon.name = 'chain'
-_addon.version = '2.1'
+_addon.version = '2.2'
 
 --Changelog
 --V1: string builder, auto SC picking
 --V2: list of commands, interuptable
 --V2.1: last-ws detection for Sortie BDGH. Not tested yet
+--v2.2: fuzzy name matching for skillchains. fuzzyfind from superwarp, credit to Akaden and Lili 
 
 --TODO
 --	manual builder, ie ch wind earth wind dark for sci det grav ala ongo. Maybe skip this? could just add them to the table
 
 require('tables')
 res = require('resources')
+require('fuzzyfind')
 
 default_helix = true --closes chains with helix1 to extend burst window. B/F Bosses are blocked from using this.
 announce_channel = "party" --alternatively, echo? wouldn't use /say or /linkshell anymore. "/" will be added later.
@@ -20,7 +22,7 @@ last_ws = {}
 
 post_ja_wait = 1.3
 post_spell_wait = 4
-post_helix_wait = 7
+post_helix_wait = 7 --Works up to 9.5 for thunder-pyro-[post_helix_wait]-iono
 post_helix_opener_wait = 7
 
 spells_to_chain = T{
@@ -121,6 +123,9 @@ windower.register_event("addon command", function (...)
 	    	skillchain_name = firstToUpper(params[1])
 	    elseif params[1] == "lf" or params[1] == "3step" then
 	    	skillchain_name = "Liqfusion"
+	    else
+	    	skillchain_name = fmatch(params[1], keys(skillchain_steps))
+	    	print(skillchain_name)
 	    end
 	end
 
@@ -156,6 +161,17 @@ windower.register_event("action", function (act)
 		last_ws[actor['index']] = mabils[act['param']]['en']
 	end
 end)
+
+function keys(tab)
+	local keyset={}
+	local n=0
+
+	for k,v in pairs(tab) do
+		n=n+1
+		keyset[n]=k
+	end
+	return keyset
+end
 
 function bdgh_skillchain(index)
 	local elemental_ws_to_sc = T{
