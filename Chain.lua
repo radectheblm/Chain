@@ -262,6 +262,7 @@ function make_skillchain(chain_name, use_helix)
 					execution_time = execution_time + post_ja_wait
 				else
 					failure_reason = "Unable to use Immanence #"..step
+					break
 				end
 
 				if step == 1 or not use_helix then
@@ -282,6 +283,7 @@ function make_skillchain(chain_name, use_helix)
 					end
 				else
 					failure_reason = "Unable to use "..spell
+					break
 				end
 			end
 		end
