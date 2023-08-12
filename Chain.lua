@@ -4,10 +4,11 @@ _addon.name = 'chain'
 _addon.version = '2.2'
 
 --Changelog
---V1: string builder, auto SC picking
---V2: list of commands, interuptable
---V2.1: last-ws detection for Sortie BDGH. Not tested yet
+--v1: string builder, auto SC picking
+--v2: list of commands, interuptable
+--v2.1: last-ws detection for Sortie BDGH. Not tested yet
 --v2.2: fuzzy name matching for skillchains. fuzzyfind from superwarp, credit to Akaden and Lili 
+--v2.3: toggle to fallback from helix to normal spell if helix cannot be cast
 
 --TODO
 --	manual builder, ie ch wind earth wind dark for sci det grav ala ongo. Maybe skip this? could just add them to the table
@@ -17,13 +18,14 @@ res = require('resources')
 require('fuzzyfind')
 
 default_helix = true --closes chains with helix1 to extend burst window. B/F Bosses are blocked from using this.
+allow_helix_recast_fallback = true --2.3 feature, if helix is on recast, use a t1 insteal
 announce_channel = "party" --alternatively, echo? wouldn't use /say or /linkshell anymore. "/" will be added later.
 last_ws = {}
 
 post_ja_wait = 1.3
-post_spell_wait = 4
-post_helix_wait = 7 --Works up to 9.5 for thunder-pyro-[post_helix_wait]-iono
-post_helix_opener_wait = 7
+post_spell_wait = 4.0
+post_helix_wait = 8.0 --Works up to 9.5 for thunder-pyro-[post_helix_wait]-iono, but is inconsistent. Less than 8.5 is safer
+post_helix_opener_wait = 7.0
 
 spells_to_chain = T{
 	['Earth'] =		{normal="Stone",		helix="Geohelix"},
@@ -118,6 +120,10 @@ windower.register_event("addon command", function (...)
 	    if params[1] == "helix" then
 	    	default_helix = not default_helix
 	    	print("Using Helix closers: "..tostring(default_helix))
+	    	return
+	    elseif params[1] == "fallback" then
+	    	allow_helix_recast_fallback = not allow_helix_recast_fallback
+	    	print("Using alternatives when Helix unavailable: "..tostring(allow_helix_recast_fallback))
 	    	return
 	    elseif skillchain_steps[firstToUpper(params[1])] ~= nil then
 	    	skillchain_name = firstToUpper(params[1])
@@ -285,6 +291,9 @@ function make_skillchain(chain_name, use_helix)
 					spell = spells_to_chain[element]['normal']
 				else
 					spell = spells_to_chain[element]['helix']
+					if spell_recasts[res.spells:with('en', spell)['id']]/60 > execution_time and allow_helix_recast_fallback then
+						spell = spells_to_chain[element]['normal']
+					end
 				end
 				if spell_recasts[res.spells:with('en', spell)['id']]/60 < execution_time then
 					command_list[#command_list+1] = spell
