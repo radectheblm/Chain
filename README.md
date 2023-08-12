@@ -11,7 +11,7 @@ Fuzzy matching works for skillchain names, "//ch grav" will match Gravitation.
 
 In addition to all 12 normal T1/T2 skillchains, Liqfusion is defined as a 3-step thunder>fire>thunder chain: "//ch lf", "//ch 3step", or "//ch liqfusion", plus fuzzy matching
 
-Toggle closing skillchains with helix spells, default setting is true: "//ch Helix"
+Toggle closing skillchains with helix spells, default setting is true: "//ch Helix". Sortie B/F bosses ignore this setting, and only use Helixes if they absolutely must, ie distortion/gravitation
 
 Toggle replacing helix spells with t1 spells, if the helix is on recast. Default setting is true: "//ch Fallback"
 
