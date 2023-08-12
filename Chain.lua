@@ -1,14 +1,15 @@
 _addon.author = 'Radec'
 _addon.command = 'ch'
 _addon.name = 'chain'
-_addon.version = '2.2'
+_addon.version = '2.4'
 
 --Changelog
 --v1: string builder, auto SC picking
 --v2: list of commands, interuptable
---v2.1: last-ws detection for Sortie BDGH. Not tested yet
+--v2.1: last-ws detection for Sortie BDGH
 --v2.2: fuzzy name matching for skillchains. fuzzyfind from superwarp, credit to Akaden and Lili 
 --v2.3: toggle to fallback from helix to normal spell if helix cannot be cast
+--v2.4: Added settings file
 
 --TODO
 --	manual builder, ie ch wind earth wind dark for sci det grav ala ongo. Maybe skip this? could just add them to the table
@@ -16,16 +17,24 @@ _addon.version = '2.2'
 require('tables')
 res = require('resources')
 require('fuzzyfind')
+config = require('config')
 
-default_helix = true --closes chains with helix1 to extend burst window. B/F Bosses are blocked from using this.
-allow_helix_recast_fallback = true --2.3 feature, if helix is on recast, use a t1 insteal
-announce_channel = "party" --alternatively, echo? wouldn't use /say or /linkshell anymore. "/" will be added later.
+-- default settings
+
+defaults = {}
+defaults.default_helix = true --closes chains with helix1 to extend burst window. B/F Bosses are blocked from using this.
+defaults.allow_helix_recast_fallback = true --2.3 feature, if helix is on recast, use a t1 insteal
+defaults.announce_channel = 'party' --which channel to call out your actions in. 
+defaults.default_chain = 'Fusion' --which channel to call out your actions in. 
+defaults.wait = {}
+defaults.wait.post_ja = 1.3
+defaults.wait.post_spell = 4.0
+defaults.wait.post_helix_opener = 7.0
+defaults.wait.post_helix = 8.0 --Works up to 9.5 for thunder-pyro-[settings.wait.post_helix]-iono, but is inconsistent. Less than 8.5 is safer
+
+settings = config.load(defaults)
+
 last_ws = {}
-
-post_ja_wait = 1.3
-post_spell_wait = 4.0
-post_helix_wait = 8.0 --Works up to 9.5 for thunder-pyro-[post_helix_wait]-iono, but is inconsistent. Less than 8.5 is safer
-post_helix_opener_wait = 7.0
 
 spells_to_chain = T{
 	['Earth'] =		{normal="Stone",		helix="Geohelix"},
@@ -79,10 +88,6 @@ default_chains_by_mob_name = T{
 
 	['Biune Porxie'] = "Liqfusion",
 
-	['Cachaemic Ghost'] = "Fusion",
-	['Cachaemic Corse'] = "Fusion",
-	['Cachaemic Skeleton'] = "Fusion",
-	['Cachaemic Ghoul'] = "Fusion",
 	['Cachaemic Bhoot'] = "Liqfusion",
 	['Skomora'] = "Liqfusion",
 
@@ -118,12 +123,14 @@ windower.register_event("addon command", function (...)
 
     if #params == 1 then
 	    if params[1] == "helix" then
-	    	default_helix = not default_helix
-	    	print("Using Helix closers: "..tostring(default_helix))
+	    	settings.default_helix = not settings.default_helix
+	    	print("Using Helix closers: "..tostring(settings.default_helix))
+	    	settings:save()
 	    	return
 	    elseif params[1] == "fallback" then
-	    	allow_helix_recast_fallback = not allow_helix_recast_fallback
-	    	print("Using alternatives when Helix unavailable: "..tostring(allow_helix_recast_fallback))
+	    	settings.allow_helix_recast_fallback = not settings.allow_helix_recast_fallback
+	    	print("Using alternatives when Helix unavailable: "..tostring(settings.allow_helix_recast_fallback))
+	    	settings:save()
 	    	return
 	    elseif skillchain_steps[firstToUpper(params[1])] ~= nil then
 	    	skillchain_name = firstToUpper(params[1])
@@ -135,28 +142,16 @@ windower.register_event("addon command", function (...)
 	    end
 	end
 
+	make_skillchain(skillchain_name, settings.default_helix)
+end)
 
-
-    --[[for _,param in pairs(params) do
-    	if 1 == 0 then
-    		print("Oh no")
-	    elseif skillchain_steps[firstToUpper(param)] ~= nil then
-	    	skillchain_name = firstToUpper(param)
-	    elseif param == "lf" or param == "3step" then
-	    	skillchain_name = "Liqfusion"
-	    elseif param == "then" then
-	    	next_command_is_final = true
-	    elseif next_command_is_final then
-	    	ending_command = param
-	    	next_command_is_final = false
-	    end
-	end]]--
-
-	--print(ending_command)
-	--windower.send_command(make_skillchain(skillchain_name, default_helix)..ending_command)
-	--print(make_skillchain(skillchain_name, default_helix)..ending_command)
-
-	make_skillchain(skillchain_name, default_helix)
+windower.register_event("load", function (...)
+	local player = windower.ffxi.get_player()
+	while not player do
+		coroutine.sleep(5)
+		player = windower.ffxi.get_player()
+	end
+	settings = config.load('data/'..player['name']..'.xml', defaults)	
 end)
 
 windower.register_event("action", function (act)
@@ -165,7 +160,14 @@ windower.register_event("action", function (act)
 
 	if act['category'] == 11 and mabils[act['param']] then
 		last_ws[actor['index']] = mabils[act['param']]['en']
+		print(actor['index'])
+		print(mabils[act['param']]['en'])
 	end
+end)
+
+windower.register_event('zone change', function(new_id, old_id)
+	--Reset last WS history
+	last_ws = {}
 end)
 
 function keys(tab)
@@ -250,7 +252,7 @@ function make_skillchain(chain_name, use_helix)
 		elseif S{'Leshonn','Degei','Gartell','Aita'}:contains(target_name) then
 			chain_name = bdgh_skillchain(player['target_index'])
 		else
-			chain_name = "Fusion" --This would be used for all the demi mobs, haughty mobs, etc
+			chain_name = settings.default_chain
 		end
 	end
 
@@ -281,7 +283,7 @@ function make_skillchain(chain_name, use_helix)
 
 				if abil_recasts[res.ability_recasts:with('en', 'Stratagems')['id']] < active_immanence+33*(5-step)+execution_time then
 					command_list[#command_list+1] = "Immanence"
-					execution_time = execution_time + post_ja_wait
+					execution_time = execution_time + settings.wait.post_ja
 				else
 					failure_reason = "Unable to use Immanence #"..step
 					break
@@ -291,7 +293,7 @@ function make_skillchain(chain_name, use_helix)
 					spell = spells_to_chain[element]['normal']
 				else
 					spell = spells_to_chain[element]['helix']
-					if spell_recasts[res.spells:with('en', spell)['id']]/60 > execution_time and allow_helix_recast_fallback then
+					if spell_recasts[res.spells:with('en', spell)['id']]/60 > execution_time and settings.allow_helix_recast_fallback then
 						spell = spells_to_chain[element]['normal']
 					end
 				end
@@ -299,12 +301,12 @@ function make_skillchain(chain_name, use_helix)
 					command_list[#command_list+1] = spell
 					if spell:find("helix") then
 						if step == 1 then
-							execution_time = execution_time + post_helix_opener_wait
+							execution_time = execution_time + settings.wait.post_helix_opener
 						else
-							execution_time = execution_time + post_helix_wait
+							execution_time = execution_time + settings.wait.post_helix
 						end
 					else
-						execution_time = execution_time + post_spell_wait
+						execution_time = execution_time + settings.wait.post_spell
 					end
 				else
 					failure_reason = "Unable to use "..spell
@@ -349,24 +351,23 @@ function run_commands(command_list, command_index, chain_name)
 			run_commands(command_list,command_index+1, chain_name)
 		else
 			windower.send_command(current_command)
-			--print(current_command.." "..os.clock())
 
 			if T{'Immanence','DarkArts'}:contains(current_command) then
-				coroutine.sleep(post_ja_wait)
+				coroutine.sleep(settings.wait.post_ja)
 			else
 				if command_index <= 3 then --da-imma-OPENER or imma-OPENER-imma
-					windower.send_command("input /"..announce_channel.." Opening "..chain_name..": "..current_command)
+					windower.send_command("input /"..settings.announce_channel.." Opening "..chain_name..": "..current_command)
 				else
-					windower.send_command("input /"..announce_channel.." "..chain_name..": "..current_command)
+					windower.send_command("input /"..settings.announce_channel.." "..chain_name..": "..current_command)
 				end
 				if current_command:find('helix') then
 					if command_index <= 3 then
-						coroutine.sleep(post_helix_opener_wait)
+						coroutine.sleep(settings.wait.post_helix_opener)
 					else
-						coroutine.sleep(post_helix_wait)
+						coroutine.sleep(settings.wait.post_helix)
 					end
 				else --Non-helix spell
-					coroutine.sleep(post_spell_wait)
+					coroutine.sleep(settings.wait.post_spell)
 				end
 			end
 
