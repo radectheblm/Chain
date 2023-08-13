@@ -25,7 +25,7 @@ defaults = {}
 defaults.default_helix = true --closes chains with helix1 to extend burst window. B/F Bosses are blocked from using this.
 defaults.allow_helix_recast_fallback = true --2.3 feature, if helix is on recast, use a t1 insteal
 defaults.announce_channel = 'party' --which channel to call out your actions in. 
-defaults.default_chain = 'Fusion' --which channel to call out your actions in. 
+defaults.default_chain = 'Fusion' --default choice when sc is not specified, and not a known mob
 defaults.wait = {}
 defaults.wait.post_ja = 1.3
 defaults.wait.post_spell = 4.0
@@ -83,7 +83,6 @@ skillchain_steps = T{
 }
 
 default_chains_by_mob_name = T{
-	['Abject Obdella'] = "Fusion",
 	['Ghatjot'] = "Liqfusion",
 
 	['Biune Porxie'] = "Liqfusion",
@@ -108,7 +107,7 @@ default_chains_by_mob_name = T{
 	['Bztavian'] = "Induration",
 	['Gabbrath'] = "Reverberation",
 	['Cehuetzi'] = "Fusion",
-	['Waktza'] = "Scission",
+	['Waktza'] = "Gravitation",
 }
 
 windower.register_event("addon command", function (...)
@@ -117,9 +116,7 @@ windower.register_event("addon command", function (...)
     for i,v in pairs(params) do params[i]=windower.convert_auto_trans(params[i]):lower() end
     for i,v in pairs(params) do params[i]=params[i]:lower() end
 
-    skillchain_name = 'auto'
-    --next_command_is_final = false
-    --ending_command = ""
+    local skillchain_name = 'auto'
 
     if #params == 1 then
 	    if params[1] == "helix" then
@@ -138,7 +135,6 @@ windower.register_event("addon command", function (...)
 	    	skillchain_name = "Liqfusion"
 	    else
 	    	skillchain_name = fmatch(params[1], keys(skillchain_steps))
-	    	print(skillchain_name)
 	    end
 	end
 
@@ -151,7 +147,17 @@ windower.register_event("load", function (...)
 		coroutine.sleep(5)
 		player = windower.ffxi.get_player()
 	end
-	settings = config.load('data/'..player['name']..'.xml', defaults)	
+	settings = config.load('data/'..player['name']..'.xml', defaults)
+end)
+
+windower.register_event("login", function (...)
+	local player = windower.ffxi.get_player()
+	while not player do
+		coroutine.sleep(5)
+		player = windower.ffxi.get_player()
+	end
+	settings = config.load('data/'..player['name']..'.xml', defaults)
+	last_ws = {}
 end)
 
 windower.register_event("action", function (act)
@@ -160,8 +166,6 @@ windower.register_event("action", function (act)
 
 	if act['category'] == 11 and mabils[act['param']] then
 		last_ws[actor['index']] = mabils[act['param']]['en']
-		print(actor['index'])
-		print(mabils[act['param']]['en'])
 	end
 end)
 
