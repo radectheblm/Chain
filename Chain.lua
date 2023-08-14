@@ -212,15 +212,7 @@ function bdgh_skillchain(index)
 		['Fulminous Smash'] = 'Gravitation'
 	}
 
-	if last_ws[index] then
-		for mob_ws,counter_chain in pairs(elemental_ws_to_sc) do
-			if mob_ws == last_ws[index] then
-				--print("Based on last tracked WS of "..last_ws[index].." chain is "..counter_chain)
-				return counter_chain
-			end
-		end
-	end
-	return 'unknown'
+	return elemental_ws_to_sc[last_ws[index]] or 'No known chain, manual until it does a WS'
 end
 
 function firstToUpper(str)
