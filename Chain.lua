@@ -1,7 +1,7 @@
 _addon.author = 'Radec'
 _addon.command = 'ch'
 _addon.name = 'chain'
-_addon.version = '2.4'
+_addon.version = '2.5'
 
 --Changelog
 --v1: string builder, auto SC picking
@@ -10,6 +10,7 @@ _addon.version = '2.4'
 --v2.2: fuzzy name matching for skillchains. fuzzyfind from superwarp, credit to Akaden and Lili 
 --v2.3: toggle to fallback from helix to normal spell if helix cannot be cast
 --v2.4: Added settings file
+--v2.5: Adjust print feedback, add verbosity setting
 
 --TODO
 --	manual builder, ie ch wind earth wind dark for sci det grav ala ongo. Maybe skip this? could just add them to the table
@@ -26,6 +27,8 @@ defaults.default_helix = true --closes chains with helix1 to extend burst window
 defaults.allow_helix_recast_fallback = true --2.3 feature, if helix is on recast, use a t1 insteal
 defaults.announce_channel = 'party' --which channel to call out your actions in. 
 defaults.default_chain = 'Fusion' --default choice when sc is not specified, and not a known mob
+defaults.verbosity = 1 --0 = none: Only extremely necessary messages. 1 = low: error messages and settings changed messages. 2 = high: all messages and delays shown
+defaults.feedback_channel = 'console' --console: print() statements, chat: add_to_chat() statements
 defaults.wait = {}
 defaults.wait.post_ja = 1.3
 defaults.wait.post_spell = 4.0
@@ -121,13 +124,13 @@ windower.register_event("addon command", function (...)
     if #params == 1 then
 	    if params[1] == "helix" then
 	    	settings.default_helix = not settings.default_helix
-	    	print("Using Helix closers: "..tostring(settings.default_helix))
 	    	settings:save()
+	    	feedback("Using Helix closers: "..tostring(settings.default_helix), 0)
 	    	return
 	    elseif params[1] == "fallback" then
 	    	settings.allow_helix_recast_fallback = not settings.allow_helix_recast_fallback
-	    	print("Using alternatives when Helix unavailable: "..tostring(settings.allow_helix_recast_fallback))
 	    	settings:save()
+	    	feedback("Using alternatives when Helix unavailable: "..tostring(settings.allow_helix_recast_fallback), 0)
 	    	return
 	    elseif skillchain_steps[firstToUpper(params[1])] ~= nil then
 	    	skillchain_name = firstToUpper(params[1])
@@ -136,6 +139,25 @@ windower.register_event("addon command", function (...)
 	    else
 	    	skillchain_name = fmatch(params[1], keys(skillchain_steps))
 	    end
+	elseif #params == 2 then
+		if params[1] == "verbosity" then
+			local param_2_numeric = tonumber(params[2], 10)
+			if param_2_numeric then
+				if param_2_numeric <= 2 and param_2_numeric >= 0 then
+					settings.verbosity = param_2_numeric
+					settings:save()
+					feedback("Verbosity set to: "..settings.verbosity, 0)
+				end
+			end
+			return
+		elseif params[1] == "feedback" then
+			if T{'console', 'chat'}:contains(params[2]) then
+				settings.feedback_channel = params[2]
+				settings:save()
+				feedback("Feedback channel set to: "..settings.feedback_channel, 0)
+			end
+			return
+		end
 	end
 
 	make_skillchain(skillchain_name, settings.default_helix)
@@ -212,22 +234,21 @@ function bdgh_skillchain(index)
 		['Fulminous Smash'] = 'Gravitation'
 	}
 
-	return elemental_ws_to_sc[last_ws[index]] or 'No known chain, manual until it does a WS'
+	return elemental_ws_to_sc[last_ws[index]] or "You haven't seen "..windower.get_mob_by_index(index)['name'].." use a WS yet, no auto-chain available"
 end
 
 function firstToUpper(str)
     return (str:gsub("^%l", string.upper))
 end
 
---Return a string for all the steps needed to make the skillchain
 function make_skillchain(chain_name, use_helix)
 	local player = windower.ffxi.get_player()
 	if player['target_index'] == nil then
-		print("No target")
+		feedback("No target", 1)
 		return
 	end
 	if player['main_job'] ~= "SCH" then
-		print("You're not a SCH, closing")
+		feedback("You're not a SCH, closing", 1)
 		windower.send_command("lua u chain")
 	end
 
@@ -312,16 +333,16 @@ function make_skillchain(chain_name, use_helix)
 		end
 
 		if failure_reason then
-			print(failure_reason)
+			feedback(failure_reason, 1)
 		else
-			run_commands(command_list, 1, chain_name)
+			run_commands(command_list, 1, chain_name, os.clock())
 		end
 	else
-		print(chain_name.." is not a valid chain")
+		feedback(chain_name.." is not a valid chain", 1)
 	end
 end
 
-function run_commands(command_list, command_index, chain_name)
+function run_commands(command_list, command_index, chain_name, start_time)
 	if command_index <= #command_list then
 		local current_command = command_list[command_index]
 		local player = windower.ffxi.get_player()
@@ -331,22 +352,23 @@ function run_commands(command_list, command_index, chain_name)
 		
 		for _,v in pairs(blocking_status) do
 			if buffs:contains(res.buffs:with('en', v)['id']) then
-				print("Chain: Stopping execution for status "..v)
+				feedback("Chain: Stopping execution for status "..v, 1)
 				return
 			end
 		end
 
 		if player['target_index'] == nil then
-			print("Chain: Stopping execution, no target")
+			feedback("Chain: Stopping execution, no target", 1)
 			return
 		end
 
 		if buffs:contains(res.buffs:with('en', "Immanence")['id']) and current_command == "Immanence" and command_index <= 2 then
 			--Already had immanence up, skip to next action. 
 			--Only valid for the first Imma, others might be buffs updating slow.
-			run_commands(command_list,command_index+1, chain_name)
+			run_commands(command_list,command_index+1, chain_name, start_time)
 		else
 			windower.send_command(current_command)
+			feedback(current_command.."@t="..math.round(os.clock()-start_time, 1), 2)
 
 			if T{'Immanence','DarkArts'}:contains(current_command) then
 				coroutine.sleep(settings.wait.post_ja)
@@ -367,7 +389,17 @@ function run_commands(command_list, command_index, chain_name)
 				end
 			end
 
-			run_commands(command_list,command_index+1, chain_name)
+			run_commands(command_list,command_index+1, chain_name, start_time)
+		end
+	end
+end
+
+function feedback(message, priority)
+	if settings.verbosity >= priority then
+		if settings.feedback_channel == "console" then
+			print(message)
+		elseif settings.feedback_channel == "chat" then
+			windower.add_to_chat(207, message)
 		end
 	end
 end
