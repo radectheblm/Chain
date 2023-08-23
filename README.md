@@ -1,6 +1,8 @@
 # Chain
 Makes SCH skillchains
 
+*** Note v2.8+ rework how chains are stored in settings files. You'll need to redo settings. ***
+
 Reduce immanence skillchaining to a single command to reduce macro sprawl
 
 Use the default skillchain, default setting is Fusion: "//ch"
