@@ -1,7 +1,7 @@
 _addon.author = 'Radec'
 _addon.command = 'ch'
 _addon.name = 'chain'
-_addon.version = '2.8'
+_addon.version = '2.8.1'
 
 --Changelog
 --v1: string builder, auto SC picking
@@ -19,6 +19,7 @@ _addon.version = '2.8'
 	--Helix blocking extended to include HaughtyTulittia
 	--Status command added to list current setting values
 	--Feedback channel, announce channel, and verbosity show acceptable values when an invalid value is chosen
+--v2.8.1: Typo fix in BDGH skillchain function
 
 
 require('tables')
@@ -234,7 +235,7 @@ function bdgh_skillchain(index)
 		['Fulminous Smash'] = 'Gravitation'
 	}
 
-	return elemental_ws_to_sc[last_ws[index]] or "You haven't seen "..windower.get_mob_by_index(index)['name'].." use a WS yet, no auto-chain available"
+	return elemental_ws_to_sc[last_ws[index]] or "You haven't seen "..windower.ffxi.get_mob_by_index(index)['name'].." use a WS yet, no auto-chain available"
 end
 
 function firstToUpper(str)
