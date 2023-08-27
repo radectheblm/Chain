@@ -1,7 +1,7 @@
 _addon.author = 'Radec'
 _addon.command = 'ch'
 _addon.name = 'chain'
-_addon.version = '2.8.1'
+_addon.version = '2.9'
 
 --Changelog
 --v1: string builder, auto SC picking
@@ -20,6 +20,7 @@ _addon.version = '2.8.1'
 	--Status command added to list current setting values
 	--Feedback channel, announce channel, and verbosity show acceptable values when an invalid value is chosen
 --v2.8.1: Typo fix in BDGH skillchain function
+--v2.9: Add option to fallback to fusion if not enough books for liqfusion
 
 
 require('tables')
@@ -33,6 +34,7 @@ defaults = {}
 defaults.IO = {}
 defaults.IO.default_helix = true --closes chains with helix1 to extend burst window. B/F Bosses, HaughtyTulittia are blocked from using this.
 defaults.IO.allow_helix_recast_fallback = true --2.3 feature, if helix is on recast, use a t1 insteal
+defaults.IO.fusion_when_low_books_on_3step = true --2.9 feature, if you don't have 3 books ready for liqfusion, try to fusion instead
 defaults.IO.announce_channel = 'party' --which channel to call out your actions in. 
 defaults.IO.default_chain = 'Fusion' --default choice when sc is not specified, and not a known mob
 defaults.IO.verbosity = 1 --0 = low: Only settings changed messages. 1 = medium: spell/ja/command failure messages and settings changed messages. 2 = high: all messages and commands/delays shown
@@ -110,6 +112,11 @@ windower.register_event("addon command", function (...)
 	    	settings.IO.allow_helix_recast_fallback = not settings.IO.allow_helix_recast_fallback
 	    	settings:save()
 	    	feedback("Using alternatives when Helix unavailable: "..tostring(settings.IO.allow_helix_recast_fallback), 0)
+	    	return
+	    elseif params[1] == "lowbooks" then
+	    	settings.IO.fusion_when_low_books_on_3step = not settings.IO.fusion_when_low_books_on_3step
+	    	settings:save()
+	    	feedback("Using Fusion if unable to do Liqfusion due to Stratagem count: "..tostring(settings.IO.fusion_when_low_books_on_3step), 0)
 	    	return
 	    elseif params[1] == "status" then
 	    	for item,value in pairs(settings.IO) do
@@ -307,6 +314,11 @@ function make_skillchain(chain_name)
 					execution_time = execution_time + settings.wait.post_ja
 				else
 					failure_reason = "Unable to use Immanence #"..step
+					if step == 3 and chain_name == "Liqfusion" and settings.IO.fusion_when_low_books_on_3step then
+						feedback("Chain: Fallback to Fusion because of low books", 1)
+						make_skillchain("Fusion")
+						return
+					end
 					break
 				end
 
