@@ -1,7 +1,7 @@
 _addon.author = 'Radec'
 _addon.command = 'ch'
 _addon.name = 'chain'
-_addon.version = '2.9'
+_addon.version = '2.11'
 
 --Changelog
 --v1: string builder, auto SC picking
@@ -21,6 +21,8 @@ _addon.version = '2.9'
 	--Feedback channel, announce channel, and verbosity show acceptable values when an invalid value is chosen
 --v2.8.1: Typo fix in BDGH skillchain function
 --v2.9: Add option to fallback to fusion if not enough books for liqfusion
+--v2.10: Another delay option - slow down third step of chains when not using helix. Delays set to 4,5.5 and 7,8 atm, not tested. Good for LiqFus on HaughtyTulittia
+--v2.11: Removed helix block on debuff-sharing NMs if the noDamageSC flag is set
 
 
 require('tables')
@@ -33,6 +35,7 @@ config = require('config')
 defaults = {}
 defaults.IO = {}
 defaults.IO.default_helix = true --closes chains with helix1 to extend burst window. B/F Bosses, HaughtyTulittia are blocked from using this.
+defaults.IO.force_allow_helix = false --always closes with helix even on B/F Bosses, HaughtyTulittia
 defaults.IO.allow_helix_recast_fallback = true --2.3 feature, if helix is on recast, use a t1 insteal
 defaults.IO.fusion_when_low_books_on_3step = true --2.9 feature, if you don't have 3 books ready for liqfusion, try to fusion instead
 defaults.IO.announce_channel = 'party' --which channel to call out your actions in. 
@@ -42,8 +45,9 @@ defaults.IO.feedback_channel = 'console' --console: print() statements, chat: ad
 
 defaults.wait = {}
 defaults.wait.post_ja = 1.3
-defaults.wait.post_spell = 4.0
+defaults.wait.post_spell_opener = 4.0
 defaults.wait.post_helix_opener = 7.0
+defaults.wait.post_spell = 5.5
 defaults.wait.post_helix = 8.0 --Works up to 9.5 for thunder-pyro-[settings.wait.post_helix]-iono, but is inconsistent. Less than 8.5 is safer
 
 defaults.skillchains = {}
@@ -93,6 +97,32 @@ defaults.chain_spells.Light = {normal="Luminohelix", helix="Luminohelix"}
 settings = config.load(defaults)
 
 last_ws = {}
+
+local elemental_ws_to_sc = T{
+	--['Eroding Flesh'] = 'Detonation',
+	['Eroding Flesh'] = 'Fragmentation',
+
+	--['Flashflood'] = 'Impaction',
+	['Flashflood'] = 'Fragmentation',
+
+	['Chokehold'] = 'Induration',
+	['Tearing Gust'] = 'Induration',
+	['Undulating Shockwave'] = 'Induration', --Shockwave is a Thunder-mode WS, but causes the switch to wind mode
+
+	['Flaming Kick'] = 'Reverberation',
+	--['Flaming Kick'] = 'Distortion', --Helix opener is slower, and D/H are never weak to ice to get lucky on element swap during SC
+
+	--['Icy Grasp'] = 'Liquefaction',
+	--['Icy Grasp'] = 'Fusion',
+	['Icy Grasp'] = 'Liqfusion',
+
+	['Zap'] = 'Gravitation',
+	['Concussive Shock'] = 'Gravitation',
+	['Shrieking Gale'] = 'Gravitation', --Gale is a Wind-mode WS, but causes the switch to thunder mode
+
+	--['Fulminous Smash'] = 'Scission',
+	['Fulminous Smash'] = 'Gravitation'
+}
 
 windower.register_event("addon command", function (...)
     local params = {...}
@@ -194,7 +224,11 @@ end)
 windower.register_event("action", function (act)
 	if act['category'] == 11 then
 		if res.monster_abilities[act['param']] then
-			last_ws[windower.ffxi.get_mob_by_id(act['actor_id'])['index']] = res.monster_abilities[act['param']]['en']
+			ability_name = res.monster_abilities[act['param']]['en']
+			if elemental_ws_to_sc:contains(ability_name) then
+				last_ws[windower.ffxi.get_mob_by_id(act['actor_id'])['index']] = ability_name
+				print(res.monster_abilities[act['param']]['en'])
+			end
 		end
 	end
 end)
@@ -216,32 +250,6 @@ function keys(tab)
 end
 
 function bdgh_skillchain(index)
-	local elemental_ws_to_sc = T{
-		--['Eroding Flesh'] = 'Detonation',
-		['Eroding Flesh'] = 'Fragmentation',
-
-		--['Flashflood'] = 'Impaction',
-		['Flashflood'] = 'Fragmentation',
-
-		['Chokehold'] = 'Induration',
-		['Tearing Gust'] = 'Induration',
-		['Undulating Shockwave'] = 'Induration', --Shockwave is a Thunder-mode WS, but causes the switch to wind mode
-
-		['Flaming Kick'] = 'Reverberation',
-		--['Flaming Kick'] = 'Distortion', --Helix opener is slower, and D/H are never weak to ice to get lucky on element swap during SC
-
-		--['Icy Grasp'] = 'Liquefaction',
-		--['Icy Grasp'] = 'Fusion',
-		['Icy Grasp'] = 'Liqfusion',
-
-		['Zap'] = 'Scission',
-		['Concussive Shock'] = 'Scission',
-		['Shrieking Gale'] = 'Scission', --Gale is a Wind-mode WS, but causes the switch to thunder mode
-
-		--['Fulminous Smash'] = 'Scission',
-		['Fulminous Smash'] = 'Gravitation'
-	}
-
 	return elemental_ws_to_sc[last_ws[index]] or "You haven't seen "..windower.ffxi.get_mob_by_index(index)['name'].." use a WS yet, no auto-chain available"
 end
 
@@ -266,8 +274,8 @@ function make_skillchain(chain_name)
 	local abil_recasts = T(windower.ffxi.get_ability_recasts())
 	local spell_recasts = T(windower.ffxi.get_spell_recasts())
 
-	--Don't MPK tanks
-	if S{'Leshonn','Gartell','HaughtyTulittia'}:contains(target_name_no_spaces) then
+	--Don't MPK tanks, only set the force allow if you have a low damage helix set
+	if S{'Leshonn','Gartell','HaughtyTulittia'}:contains(target_name_no_spaces) and not settings.IO.force_allow_helix then
 		use_helix = false
 	else
 		use_helix = settings.IO.default_helix
@@ -339,7 +347,11 @@ function make_skillchain(chain_name)
 							execution_time = execution_time + settings.wait.post_helix
 						end
 					else
-						execution_time = execution_time + settings.wait.post_spell
+						if step == 1 then
+							execution_time = execution_time + settings.wait.post_spell_opener
+						else
+							execution_time = execution_time + settings.wait.post_spell
+						end
 					end
 				else
 					failure_reason = "Unable to use "..spell
@@ -403,7 +415,11 @@ function run_commands(command_list, command_index, chain_name, start_time)
 						coroutine.sleep(settings.wait.post_helix)
 					end
 				else --Non-helix spell
-					coroutine.sleep(settings.wait.post_spell)
+					if command_index <= 3 then
+						coroutine.sleep(settings.wait.post_spell_opener)
+					else
+						coroutine.sleep(settings.wait.post_spell)
+					end
 				end
 			end
 
@@ -422,7 +438,7 @@ function feedback(message, priority)
 	end
 end
 
-function split_trim (inputstr, sep)
+function split_trim (inputstr, sep) --splits a string on the given seperator, trims whitespace from each element, and returns the elements in a list.
     if sep == nil then
             sep = "%s"
     end
