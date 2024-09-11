@@ -227,7 +227,7 @@ windower.register_event("action", function (act)
 			ability_name = res.monster_abilities[act['param']]['en']
 			if elemental_ws_to_sc[ability_name] then
 				last_ws[windower.ffxi.get_mob_by_id(act['actor_id'])['index']] = ability_name
-				print(res.monster_abilities[act['param']]['en'])
+				--print(res.monster_abilities[act['param']]['en'])
 			end
 		end
 	end
