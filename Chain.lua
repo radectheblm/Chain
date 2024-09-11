@@ -1,7 +1,7 @@
 _addon.author = 'Radec'
 _addon.command = 'ch'
 _addon.name = 'chain'
-_addon.version = '2.11'
+_addon.version = '2.12'
 
 --Changelog
 --v1: string builder, auto SC picking
@@ -23,7 +23,7 @@ _addon.version = '2.11'
 --v2.9: Add option to fallback to fusion if not enough books for liqfusion
 --v2.10: Another delay option - slow down third step of chains when not using helix. Delays set to 4,5.5 and 7,8 atm, not tested. Good for LiqFus on HaughtyTulittia
 --v2.11: Removed helix block on debuff-sharing NMs if the noDamageSC flag is set
-
+--v2.12: SC detection for BDGH works now. Can you tell I don't SCH there often?
 
 require('tables')
 require('fuzzyfind')
@@ -225,7 +225,7 @@ windower.register_event("action", function (act)
 	if act['category'] == 11 then
 		if res.monster_abilities[act['param']] then
 			ability_name = res.monster_abilities[act['param']]['en']
-			if elemental_ws_to_sc:contains(ability_name) then
+			if elemental_ws_to_sc[ability_name] then
 				last_ws[windower.ffxi.get_mob_by_id(act['actor_id'])['index']] = ability_name
 				print(res.monster_abilities[act['param']]['en'])
 			end
